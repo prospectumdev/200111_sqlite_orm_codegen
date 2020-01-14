@@ -1,0 +1,10 @@
+.vs/
+Debug/
+x64/
+*.db
+*.dbl
+*.png
+*.rar
+*.sqlite3
+*.user
+*.wav
