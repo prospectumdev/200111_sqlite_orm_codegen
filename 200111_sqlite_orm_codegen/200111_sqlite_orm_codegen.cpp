@@ -66,10 +66,8 @@ void writeHeaderFile(string& fnHeader, vector<TableParameters>& tables, string& 
 	h << "using namespace std;\n\n";
 	h << "#include \"sqlite_orm.h\"\nusing namespace sqlite_orm;\n\n";
 	h << "namespace db\n{\n";
-	for (auto table : tables)
-	{
-		h << generateOrmStructDefinition(table);
-	}
+	for (auto table : tables){h << generateOrmStructDefinition(table);}
+	h << generateOrmStorageTypeDefinition(tables, schemaName);
 	h << generateOrmTableDefinition(tables, schemaName);
 	h << "}";
 	h.close();
@@ -77,10 +75,12 @@ void writeHeaderFile(string& fnHeader, vector<TableParameters>& tables, string& 
 
 int main()
 {
+	string fnSourceDB("preexistingDatabase_NATIVE.sqlite3");
+	//string fnSourceDB("preexistingDatabase_CODM.sqlite3");
+
 	//read db structure and generate sqlite_orm header file
 #ifndef _test_
 	//inits
-	string fnSourceDB("preexistingDatabase.sqlite3");
 	string fnHeader("myDB.h");
 	string schemaName("myDB");
 
@@ -91,13 +91,40 @@ int main()
 	sqlite3_close(db);
 
 	//generate header file
+	//tables.resize(36);
 	writeHeaderFile(fnHeader, tables, schemaName);
 #endif
 
 	//create a test db using the generated header file
 #ifdef _test_
-	string fnTestDB("newDatabase.sqlite3");
-	unique_ptr<db::myDB>  testdb = make_unique<db::myDB>(db::initmyDB(fnTestDB));
-	testdb->sync_schema(true);
+	string fnTestDB;
+
+	bool testPerformSync = true;
+	bool testCreateNewDB = false;
+
+	if (testPerformSync)
+	{
+		fnTestDB = fnSourceDB;
+		auto mydb = make_unique<db::myDB>(db::initmyDB(fnTestDB));
+		auto res = mydb->sync_schema_simulate();
+		ofstream dbg("dbg.txt");
+		for (auto r : res)
+		{
+			cout << r.first << " -> \"" << r.second << "\"\n";
+			dbg  << r.first << " -> \"" << r.second << "\"\n";
+		}
+		dbg.close();
+		mydb.reset();
+	}
+
+	if (testCreateNewDB)
+	{
+		fnTestDB = "newDatabase.sqlite3";
+		auto mydb = make_unique<db::myDB>(db::initmyDB(fnTestDB));
+		auto res = mydb->sync_schema();
+		mydb.reset();
+	}
 #endif
+	
+	printf("done.\n");
 }

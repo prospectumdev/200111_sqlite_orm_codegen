@@ -7,19 +7,18 @@ void transformTypeForOrmStruct(string& type)
 	{
 		type.erase(std::remove(type.begin(), type.end(), chars[i]), type.end());
 	}
-	std::for_each(type.begin(), type.end(), [](char& c) {
-		c = ::tolower(c); });
+	std::for_each(type.begin(), type.end(), [](char& c) {c = ::tolower(c); });
 
 	//TODO: Add all possible types
 	map<string, string> typeLUT{
-		{ "blob", "vector<char>" },
-		{ "character", "char" },
-		{ "double", "double" },
-		{ "int", "int" },
-		{ "integer", "int" },
-		{ "real", "double" },
-		{ "text", "string" },
-		{ "varchar", "string" },
+		{ "blob",		 "vector<char>" },
+		{ "character",   "string" },
+		{ "double",		 "double" },
+		{ "int",		 "int" },
+		{ "integer", 	 "int" },
+		{ "real",		 "double" },
+		{ "text",		 "string" },
+		{ "varchar",	 "string" },
 		{ "unsignedint", "unsigned int" },
 	};
 
@@ -58,7 +57,7 @@ static string generateOrmTableDefinition(vector<TableParameters> tables, string 
 {
 	string o;
 
-	o += "auto init" + schemaName + "(const string& path)\n{\n";
+	o += "static "+ schemaName +" init" + schemaName + "(const string& path)\n{\n";
 	o += "\treturn make_storage(path,\n";
 
 	for (auto table : tables)
@@ -72,16 +71,18 @@ static string generateOrmTableDefinition(vector<TableParameters> tables, string 
 			{
 				string transformedType = column.type;
 				transformTypeForOrmStruct(transformedType);
-				//adding "" to string type most likey correct but untested
-				//if (transformedType =="string")
-				//	column.dflt_value = "\"" + column.dflt_value + "\"";
-				if (transformedType == "char")
+
+				if (transformedType == "string" && column.dflt_value.size() > 2)
 				{
-					column.dflt_value.erase(std::remove(column.dflt_value.begin(), column.dflt_value.end(), '\''), column.dflt_value.end());
-					column.dflt_value = "\"" + column.dflt_value + "\"";
+					//column.dflt_value.erase(std::remove(column.dflt_value.begin(), column.dflt_value.end(), '\''), column.dflt_value.end());
+					string temp = column.dflt_value.substr(1, column.dflt_value.size() - 2);
+					column.dflt_value = "\"" + temp + "\"";
 				}
-				//columnAttributes.push_back("default_value<" + transformedType + ">(" + column.dflt_value + ")");
-				columnAttributes.push_back("default_value(" + column.dflt_value + ")");
+
+				if (transformedType != "string")
+					columnAttributes.push_back("default_value<"+ transformedType +">(" + column.dflt_value + ")");
+				else //no type definition for strings
+					columnAttributes.push_back("default_value(" + column.dflt_value + ")");
 			}
 			if (column.columnMetadata.autoinc)
 				columnAttributes.push_back("autoincrement()");
@@ -156,6 +157,88 @@ static string generateOrmTableDefinition(vector<TableParameters> tables, string 
 	}
 	o += "\t);\n";
 	o += "}\n";
-	o += "using " + schemaName + " = decltype(init" + schemaName + "(\"\"));\n";
+	//o += "using " + schemaName + " = decltype(init" + schemaName + "(\"\"));\n";
 	return o;
 };
+static string generateOrmStorageTypeDefinition(vector<TableParameters> tables, string schemaName = "DB")
+{
+	string o;
+
+	o += "template<class O, class T, class ...Op>\n";
+	o += "using Column = internal::column_t<O, T, const T & (O::*)() const, void (O::*)(T), Op...>;\n\n";
+	
+	o += "using " + schemaName + " = internal::storage_t <\n";
+
+	for (auto table : tables)
+	{
+		o += "\tinternal::table_t < " + table.name + ",\n";
+		for (auto column : table.columnInfos)
+		{
+			o += "\t\tColumn< " + table.name;
+			o += ", decltype(" + table.name + "::" + column.name + ")";
+			
+			//constraints
+			{
+				string constraints;
+				if (column.dflt_value != "")
+				{
+					string transformedType = column.type;
+					transformTypeForOrmStruct(transformedType);
+					if (transformedType == "string") transformedType = "const char*";
+					constraints += (", constraints::default_t<"+ transformedType +">");
+				}
+				if (column.columnMetadata.autoinc)
+					constraints += (", constraints::autoincrement_t");
+
+				//primary key definition is added separately after column definitions
+				//so it is omitted here
+				//if (column.pk)
+				//	constraints += (", constraints::primary_key_t<>");
+				
+				bool columnIsUniqueIndex = false;
+				for (auto index : table.indexList)
+				{
+					if (index.unique && index.indexInfo.name == column.name)
+						columnIsUniqueIndex = true;
+				}
+				if (columnIsUniqueIndex)
+				{
+					constraints += (", constraints::unique_t");
+				}
+
+				o += constraints;
+			}
+			o += ">";
+			if (tables.size() > 0)
+				if (column.name != table.columnInfos.back().name)
+					o += ",";
+			o += "\n";
+		}
+
+		//create primary key statement
+		vector<string> primaryKeys;
+		for (auto column : table.columnInfos)
+		{
+			if (column.pk) primaryKeys.push_back(column.name);
+		}
+		if (primaryKeys.size() > 0)
+		{
+			o += "\t\t, constraints::primary_key_t<";
+			for (auto i = 0; i < primaryKeys.size(); i++)
+			{
+				o += "decltype(&" + table.name + "::" + primaryKeys[i] +")";
+				if (i < primaryKeys.size() - 1)
+					o += ", ";
+			}
+			o += ">\n";
+		}
+
+		o += "\t>";
+		if (tables.size() > 0)
+			if (table.name != tables.back().name)
+				o += ",";
+		o+="\n";
+	}
+	o += ">;\n";
+	return o;
+}
