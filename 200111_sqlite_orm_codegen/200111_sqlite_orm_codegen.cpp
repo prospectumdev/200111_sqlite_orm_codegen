@@ -4,7 +4,7 @@
 //#define _use_foreign_keys_
 
 #ifdef _DEBUG
-	#pragma comment (lib, "sqlite3d.lib")
+	#pragma comment (lib, "sqlite3.lib")
 #else
 	#pragma comment (lib, "sqlite3.lib")
 #endif
@@ -15,6 +15,7 @@
 #include <algorithm>
 #include <fstream>
 #include <map>
+#include <filesystem>
 using namespace std;
 
 #include "sqlite3.h"
@@ -73,10 +74,9 @@ void writeHeaderFile(string& fnHeader, vector<TableParameters>& tables, string& 
 	h.close();
 }
 
-int main()
+int main(int argc, char* argv[])
 {
-	string fnSourceDB("preexistingDatabase_NATIVE.sqlite3");
-	//string fnSourceDB("preexistingDatabase_CODM.sqlite3");
+	string fnSourceDB(argv[1]);// ("preexistingDatabase_NATIVE.sqlite3");
 
 	//read db structure and generate sqlite_orm header file
 #ifndef _test_

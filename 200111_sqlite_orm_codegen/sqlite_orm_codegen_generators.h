@@ -41,7 +41,8 @@ static string generateOrmStructDefinition(TableParameters tableParameters)
 	{
 		//transform type
 		string type = columnInfo.type;
-		transformTypeForOrmStruct(type);
+		if (columnInfo.type != "")
+			transformTypeForOrmStruct(type);
 
 		//make it a unique_ptr if it is allowed to be NULL
 		if (!columnInfo.notnull) type = "unique_ptr<" + type + ">";
@@ -103,6 +104,9 @@ static string generateOrmTableDefinition(vector<TableParameters> tables, string 
 			{
 				columnAttributes.push_back("unique()");
 			}
+
+			if (column.pk)
+				columnAttributes.push_back("primary_key()");
 			
 			string preparedColumnAttributes;
 			if (columnAttributes.size() > 0) preparedColumnAttributes += ",";
@@ -131,23 +135,23 @@ static string generateOrmTableDefinition(vector<TableParameters> tables, string 
 		}
 #endif
 
-		//create primary key statement
-		vector<string> primaryKeys;
-		for (auto column : table.columnInfos)
-		{
-			if (column.pk) primaryKeys.push_back(column.name);
-		}
-		if (primaryKeys.size() > 0)
-		{
-			o += "\t\t\t,primary_key(";
-			for (auto i = 0; i < primaryKeys.size(); i++)
-			{
-				o += "&"+table.name + "::" + primaryKeys[i];
-				if (i < primaryKeys.size() - 1)
-					o += ", ";
-			}
-			o +=")\n";
-		}
+		////create primary key statement
+		//vector<string> primaryKeys;
+		//for (auto column : table.columnInfos)
+		//{
+		//	if (column.pk) primaryKeys.push_back(column.name);
+		//}
+		//if (primaryKeys.size() > 0)
+		//{
+		//	o += "\t\t\t,primary_key(";
+		//	for (auto i = 0; i < primaryKeys.size(); i++)
+		//	{
+		//		o += "&"+table.name + "::" + primaryKeys[i];
+		//		if (i < primaryKeys.size() - 1)
+		//			o += ", ";
+		//	}
+		//	o +=")\n";
+		//}
 
 		string comma;
 		if (tables.size() > 0)
@@ -185,7 +189,7 @@ static string generateOrmStorageTypeDefinition(vector<TableParameters> tables, s
 					string transformedType = column.type;
 					transformTypeForOrmStruct(transformedType);
 					if (transformedType == "string") transformedType = "const char*";
-					constraints += (", constraints::default_t<"+ transformedType +">");
+					constraints += (", internal::default_t<"+ transformedType +">");
 				}
 				if (column.columnMetadata.autoinc)
 					constraints += (", constraints::autoincrement_t");
@@ -193,7 +197,7 @@ static string generateOrmStorageTypeDefinition(vector<TableParameters> tables, s
 				//primary key definition is added separately after column definitions
 				//so it is omitted here
 				//if (column.pk)
-				//	constraints += (", constraints::primary_key_t<>");
+				//	constraints += (", internal::primary_key_t<>");
 				
 				bool columnIsUniqueIndex = false;
 				for (auto index : table.indexList)
@@ -203,8 +207,11 @@ static string generateOrmStorageTypeDefinition(vector<TableParameters> tables, s
 				}
 				if (columnIsUniqueIndex)
 				{
-					constraints += (", constraints::unique_t");
+					constraints += (", internal::unique_t<>");
 				}
+
+				if (column.pk)
+					constraints += (", internal::primary_key_t<>");
 
 				o += constraints;
 			}
@@ -215,23 +222,23 @@ static string generateOrmStorageTypeDefinition(vector<TableParameters> tables, s
 			o += "\n";
 		}
 
-		//create primary key statement
-		vector<string> primaryKeys;
-		for (auto column : table.columnInfos)
-		{
-			if (column.pk) primaryKeys.push_back(column.name);
-		}
-		if (primaryKeys.size() > 0)
-		{
-			o += "\t\t, constraints::primary_key_t<";
-			for (auto i = 0; i < primaryKeys.size(); i++)
-			{
-				o += "decltype(&" + table.name + "::" + primaryKeys[i] +")";
-				if (i < primaryKeys.size() - 1)
-					o += ", ";
-			}
-			o += ">\n";
-		}
+		////create primary key statement
+		//vector<string> primaryKeys;
+		//for (auto column : table.columnInfos)
+		//{
+		//	if (column.pk) primaryKeys.push_back(column.name);
+		//}
+		//if (primaryKeys.size() > 0)
+		//{
+		//	o += "\t\t, constraints::primary_key_t<";
+		//	//for (auto i = 0; i < primaryKeys.size(); i++)
+		//	//{
+		//	//	o += "decltype(&" + table.name + "::" + primaryKeys[i] +")";
+		//	//	if (i < primaryKeys.size() - 1)
+		//	//		o += ", ";
+		//	//}
+		//	o += ">\n";
+		//}
 
 		o += "\t>";
 		if (tables.size() > 0)
